@@ -1,0 +1,21 @@
+# These are expected SCIM-provisioned group display names, not group resources.
+groups:
+  admin: aws-org-admins
+  readonly: aws-org-readonly
+  operator: aws-org-operators
+  ai_admin: aws-org-ai-admins
+
+# Example assignment intentions. Account keys refer to a private inventory.
+assignments:
+  readonly_nonproduction:
+    group: readonly
+    permission_set: readonly
+    accounts: [application_nonproduction]
+  operator_nonproduction:
+    group: operator
+    permission_set: operator
+    accounts: [application_nonproduction]
+  ai_admin_sandbox:
+    group: ai_admin
+    permission_set: ai_admin
+    accounts: [sandbox]

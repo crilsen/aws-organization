@@ -1,0 +1,23 @@
+# Replace placeholders only in a private, untracked inventory.
+accounts:
+  log_archive:
+    id: "<12-digit-account-id>"
+    ou: security
+  security_tooling:
+    id: "<12-digit-account-id>"
+    ou: security
+  network:
+    id: "<12-digit-account-id>"
+    ou: infrastructure
+  shared_services:
+    id: "<12-digit-account-id>"
+    ou: infrastructure
+  application_production:
+    id: "<12-digit-account-id>"
+    ou: production
+  application_nonproduction:
+    id: "<12-digit-account-id>"
+    ou: nonproduction
+  sandbox:
+    id: "<12-digit-account-id>"
+    ou: sandbox
