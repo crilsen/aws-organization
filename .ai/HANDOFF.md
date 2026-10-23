@@ -21,6 +21,7 @@
 - Committed and pushed the plan to `https://github.com/crilsen/aws-organization` on `main`.
 - Revised the identity boundary: human-only profiles cannot be assigned to AI identities, AI runtimes must not receive human AWS CLI/SSO credentials, and the residual risk of credential reuse is explicit.
 - Added three CI entrypoints and a shared shell script for validate, private plan storage, checksum-verified apply, and fail-closed prerequisites.
+- Confirmed the human approval gate occurs after a successful plan in all three pipelines; selecting `apply` at dispatch is not itself approval.
 
 ## Validation
 

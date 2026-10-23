@@ -10,6 +10,8 @@
 
 Choose exactly one platform for each apply run. The selection is made in that platform's UI at run time; the repository does not contain a permanent "active CI" variable. The other platforms may still validate commits. Do not trigger two apply pipelines for the same stack. A shared remote Terraform backend lock is the final concurrency guard across platforms; Jenkins `disableConcurrentBuilds`, GitHub `concurrency`, and GitLab `resource_group` only serialize within their own platform.
 
+**Required order:** validate → generate and store the plan → reviewer opens the private text plan and checks its SHA-256 and target stack → native human approval → apply the same binary plan. Selecting `apply` when starting a pipeline is only a request to reach the approval gate; it is not approval. A failed plan never reaches the gate. Jenkins uses the `Approve apply` input stage after `Plan`; GitHub's protected environment is on the `apply` job, which has `needs: plan`; GitLab's protected manual `apply` job has `needs: plan`. Do not approve based on a plan from another commit, stack, run, or CI platform.
+
 ## Common execution contract
 
 All three pipelines call `scripts/ci/terraform.sh`:
