@@ -10,6 +10,7 @@ Read [the project plan](docs/project-plan.md) for the target architecture, namin
 
 - Treat an existing organization and Identity Center instance as inputs to adopt or import. Never assume that a live organization can be recreated safely.
 - Keep every permission set policy inline. Each permission set has one JSON document containing its allow and explicit deny statements; no AWS or customer managed policy attachments.
+- Keep each permission set, SCP, and RCP policy in its own `.tf` file within the relevant stack; keep attachments and account assignments in separate files.
 - Reference Entra-provisioned groups through the Identity Store. Terraform owns AWS account assignments, not workforce identities.
 - Reserve admin, read-only, and operator for human identities. AI workloads use only a guarded AI authorization profile, with separate credentials and no management-account assignment. This boundary depends on keeping human credentials out of AI runtimes, including AWS CLI SSO caches.
 - Manage SCPs and RCPs as separate policy types with staged attachments and documented exceptions.

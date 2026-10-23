@@ -50,7 +50,19 @@ modules/
   account-assignment/
 stacks/
   organization/
+    scp_protect_org.tf
+    scp_protect_logging.tf
+    scp_protect_identity.tf
+    scp_region_boundary.tf
+    rcp_require_tls.tf
+    rcp_external_access_boundary.tf
+    policy_attachments.tf
   identity-center/
+    permission_set_admin.tf
+    permission_set_readonly.tf
+    permission_set_operator.tf
+    permission_set_ai_admin.tf
+    account_assignments.tf
 examples/
   organization.auto.tfvars.example
   identity-center.auto.tfvars.example
@@ -64,7 +76,7 @@ scripts/ci/terraform.sh
 .ai/
 ```
 
-`modules/` are small reusable Terraform modules. `stacks/organization` and `stacks/identity-center` have separate state, provider configuration, and change review. Example files are documentation, never live values. Introduce files as stages are implemented; this tree is the target layout.
+`modules/` are small reusable Terraform modules. `stacks/organization` and `stacks/identity-center` have separate state, provider configuration, and change review. Each policy has exactly one dedicated `.tf` file in its stack directory; the examples above are the initial catalog, not implemented files. Terraform loads all `.tf` files in a stack directory together, so file boundaries serve review and ownership rather than creating separate state. Policy attachments and account assignments live in separate files. Do not combine multiple policy documents in one `.tf` file or generate the catalog from a single `for_each` policy definition. Example files are documentation, never live values. Introduce files as stages are implemented; this tree is the target layout.
 
 ## 4. Naming contract
 
@@ -90,7 +102,7 @@ Tags on taggable resources: `project=aws-organization`, `managed-by=terraform`, 
 | Operator | Human day-2 operations only | Curated operations on approved services/resources | IAM, Organizations, Identity Center, account closure, and security-control mutations | Human-only Entra operators group; workload accounts. |
 | AI admin guarded | AI-driven administrative tasks only | Broad capability only in isolated member accounts | Explicit denies for deletion/termination, account closure, policy detachment, permission escalation, role assumption, and disabling logs/security services | Dedicated AI identity; sandbox or nonproduction only. No production or management assignment by default. |
 
-All four policies are generated inline with `aws_iam_policy_document` and attached using exactly one `aws_ssoadmin_permission_set_inline_policy` per set. No `aws_ssoadmin_managed_policy_attachment` or customer-managed attachment belongs in the implementation. IAM Identity Center permits one inline policy per permission set and enforces size limits; policy generation must check both total and non-whitespace length. An AI admin deny list cannot guarantee protection from every destructive API, especially new APIs. Combine the inline deny with SCP protection, narrowly scoped account assignment, plan review, and human approval for apply. Do not describe this profile as a full administrator in security claims.
+Each permission set has its own `permission_set_<profile>.tf` containing its `aws_iam_policy_document`, `aws_ssoadmin_permission_set`, and exactly one `aws_ssoadmin_permission_set_inline_policy`. The policy is inline in IAM Identity Center even though its Terraform source occupies a separate file. Do not use `aws_ssoadmin_managed_policy_attachment` or customer-managed attachments. IAM Identity Center permits one inline policy per permission set and enforces size limits; policy generation must check both total and non-whitespace length. An AI admin deny list cannot guarantee protection from every destructive API, especially new APIs. Combine the inline deny with SCP protection, narrowly scoped account assignment, plan review, and human approval for apply. Do not describe this profile as a full administrator in security claims.
 
 Session durations should start at 1 hour for admin and AI admin, and at 4 hours for read-only/operator, subject to the organization's requirements. Permission-set changes can trigger reprovisioning to assigned accounts; roll out gradually.
 
@@ -121,7 +133,7 @@ If an AI agent can read or reuse a human's valid CLI/SDK credentials, it can exe
 | `require-tls` | RCP | Test OU, then selected member OUs | Deny insecure transport to supported resources such as S3; validate service principal exceptions and AWS-supported resource types. |
 | `external-access-boundary` | RCP | Test OU only at first | Evaluate restricting access by organization ID for supported resource types. Document expected cross-organization integrations before expanding. |
 
-Keep each policy in its own reviewed source file and use `aws_organizations_policy` with explicit `SERVICE_CONTROL_POLICY` or `RESOURCE_CONTROL_POLICY` type. Attach with `aws_organizations_policy_attachment`. Enable policy types explicitly only after prerequisites and testing. Retain AWS-managed `FullAWSAccess` / `RCPFullAWSAccess` behavior as required for deny-list strategy; never replace it casually. RCPs apply only to AWS-supported resources and do not cover the management account. SCPs constrain principals in member accounts and do not grant permission.
+Keep each policy in its own reviewed `scp_<purpose>.tf` or `rcp_<purpose>.tf` file, containing one policy document and its `aws_organizations_policy` resource with explicit `SERVICE_CONTROL_POLICY` or `RESOURCE_CONTROL_POLICY` type. Define `aws_organizations_policy_attachment` resources in `policy_attachments.tf` so policy content and rollout scope are independently reviewable. Enable policy types explicitly only after prerequisites and testing. Retain AWS-managed `FullAWSAccess` / `RCPFullAWSAccess` behavior as required for deny-list strategy; never replace it casually. RCPs apply only to AWS-supported resources and do not cover the management account. SCPs constrain principals in member accounts and do not grant permission.
 
 ## 7. Entra integration contract
 

@@ -17,3 +17,4 @@
 - Published the plan to the public `crilsen/aws-organization` GitHub repository.
 - Updated the plan to keep admin, read-only, and operator exclusive to human identities and to document AWS CLI credential reuse risk.
 - Added Jenkins Multibranch, GitHub Actions, and GitLab CI pipelines with a shared Terraform script and run-time selection of the apply platform.
+- Specified one dedicated `.tf` file per permission-set policy, SCP, and RCP in the target stack layout.

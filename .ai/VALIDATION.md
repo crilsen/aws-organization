@@ -4,6 +4,7 @@
 
 - Check documentation links, naming examples, and absence of real identifiers or secrets.
 - Confirm that the project plan names the requested profiles, inline-only policies, Entra group assignments, SCPs, RCPs, and staged rollout.
+- Confirm that every planned permission-set policy, SCP, and RCP has its own `.tf` file path and that no file defines multiple policy documents.
 - Check Git working tree and public repository visibility after publication.
 - Parse GitHub/GitLab CI YAML, run `bash -n` and `shellcheck` on the common CI script, run credential-free validation, and verify plan/apply fail when stacks or approval prerequisites are absent.
 

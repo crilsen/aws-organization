@@ -6,7 +6,7 @@
 - Source of truth: `AGENTS.md` → `.ai/`; architecture plan in `docs/project-plan.md`.
 - Budget / usage observed: unknown.
 - Checkpoint updated: 2026-10-23.
-- Last goal: add Jenkins Multibranch, GitHub Actions, and GitLab CI with run-time selection of the apply platform.
+- Last goal: specify one Terraform source file per policy in the project plan.
 - Annotation language: English (chosen for this task; no standing preference declared).
 - Context maintenance: automatic (chosen by the user).
 - Exact next action: implement the Terraform stacks and configure private CI prerequisites before any live plan/apply.
@@ -22,6 +22,7 @@
 - Revised the identity boundary: human-only profiles cannot be assigned to AI identities, AI runtimes must not receive human AWS CLI/SSO credentials, and the residual risk of credential reuse is explicit.
 - Added three CI entrypoints and a shared shell script for validate, private plan storage, checksum-verified apply, and fail-closed prerequisites.
 - Confirmed the human approval gate occurs after a successful plan in all three pipelines; selecting `apply` at dispatch is not itself approval.
+- Added an explicit one-policy-per-`.tf` source layout for permission sets, SCPs, and RCPs; policy attachments and account assignments remain separate.
 
 ## Validation
 
