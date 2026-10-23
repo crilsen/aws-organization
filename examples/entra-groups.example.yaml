@@ -1,4 +1,5 @@
 # These are expected SCIM-provisioned group display names, not group resources.
+# The first three groups contain people only. The AI group/identity must remain separate.
 groups:
   admin: aws-org-admins
   readonly: aws-org-readonly

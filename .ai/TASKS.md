@@ -14,3 +14,4 @@
 - Adopted the existing `.ai/` template for this project.
 - Documented the target architecture, naming, security model, Entra contract, Terraform resources, stages, and risks.
 - Published the plan to the public `crilsen/aws-organization` GitHub repository.
+- Updated the plan to keep admin, read-only, and operator exclusive to human identities and to document AWS CLI credential reuse risk.

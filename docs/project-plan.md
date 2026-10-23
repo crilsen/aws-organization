@@ -82,14 +82,30 @@ Tags on taggable resources: `project=aws-organization`, `managed-by=terraform`, 
 
 | Profile | Intended use | Inline allow | Inline explicit deny | Assignment rule |
 | --- | --- | --- | --- | --- |
-| Admin | Human platform administrators | Broad administrative access, with scope refined per account | Defense-in-depth denies for organization exit/closure and disabling core logging | Named human admin group; management account only by explicit separate approval. |
-| Read-only | Audit and troubleshooting | Read/list/describe actions across approved services | Mutating actions absent | Entra read-only group; selected member accounts. |
-| Operator | Day-2 operations | Curated operations on approved services/resources | IAM, Organizations, Identity Center, account closure, and security-control mutations | Entra operators group; workload accounts. |
-| AI admin guarded | AI-driven administrative tasks | Broad capability only in isolated member accounts | Explicit denies for deletion/termination, account closure, policy detachment, permission escalation, and disabling logs/security services | Entra AI admin group; sandbox or nonproduction only. No production or management assignment by default. |
+| Admin | Human platform administrators only | Broad administrative access, with scope refined per account | Defense-in-depth denies for organization exit/closure and disabling core logging | Human-only Entra admin group; management account only by explicit separate approval. |
+| Read-only | Human audit and troubleshooting only | Read/list/describe actions across approved services | Mutating actions absent | Human-only Entra read-only group; selected member accounts. |
+| Operator | Human day-2 operations only | Curated operations on approved services/resources | IAM, Organizations, Identity Center, account closure, and security-control mutations | Human-only Entra operators group; workload accounts. |
+| AI admin guarded | AI-driven administrative tasks only | Broad capability only in isolated member accounts | Explicit denies for deletion/termination, account closure, policy detachment, permission escalation, role assumption, and disabling logs/security services | Dedicated AI identity; sandbox or nonproduction only. No production or management assignment by default. |
 
 All four policies are generated inline with `aws_iam_policy_document` and attached using exactly one `aws_ssoadmin_permission_set_inline_policy` per set. No `aws_ssoadmin_managed_policy_attachment` or customer-managed attachment belongs in the implementation. IAM Identity Center permits one inline policy per permission set and enforces size limits; policy generation must check both total and non-whitespace length. An AI admin deny list cannot guarantee protection from every destructive API, especially new APIs. Combine the inline deny with SCP protection, narrowly scoped account assignment, plan review, and human approval for apply. Do not describe this profile as a full administrator in security claims.
 
 Session durations should start at 1 hour for admin and AI admin, and at 4 hours for read-only/operator, subject to the organization's requirements. Permission-set changes can trigger reprovisioning to assigned accounts; roll out gradually.
+
+### Human-only access boundary, including the AWS CLI
+
+The admin, read-only, and operator permission sets are **human-only**. AWS IAM Identity Center issues temporary credentials for an assigned permission set that work through the console, AWS CLI, and SDKs. A policy cannot reliably determine whether the caller is a person or an AI agent when both use the same credentials. In particular, `aws:UserAgent` is caller-controlled and is not an authorization boundary. Human-only does **not** mean console-only: authorized people may use the CLI, but agents must not receive their CLI credentials or SSO session cache.
+
+Enforce the boundary at identity assignment and credential custody:
+
+1. Entra human groups contain named workforce users only. AI identities and workload service principals are excluded; membership changes require a human approval process, with privileged access controls for admin membership.
+2. Terraform allows the three human permission sets to be assigned only to the three declared human group keys. It rejects direct user assignments and any AI group → human permission-set pairing. An AI identity may receive only the guarded AI profile. Verify the effective assignments in AWS after each change.
+3. Run AI agents in isolated environments with a dedicated AI credential source. Do not mount a person's `~/.aws`, SSO cache, browser session, environment variables, or copied temporary credentials into the agent runtime. A human using the AWS CLI must keep that session outside the AI execution environment.
+4. The AI role must explicitly deny `sts:AssumeRole`, `iam:PassRole`, IAM privilege creation, Identity Center assignment administration, and Organizations policy administration unless a narrowly reviewed use case proves an exception. Test attempted role hopping and policy changes as negative cases.
+5. Keep Terraform apply and permission-assignment changes behind a separate human-reviewed CI identity. Log and alert on use of human permission-set roles from unexpected execution environments; telemetry supports investigation but does not prove that a call was human.
+
+For a supervised agent using IAM Identity Center, use a dedicated Entra-provisioned user assigned only to the AI group and guarded AI permission set. Do not use a human's Entra/SSO login for the agent. For a headless agent, use a separate short-lived workload identity (for example, OIDC into a dedicated IAM role) with the same or narrower guardrails; an Entra service principal must not be assumed to work as an IAM Identity Center workforce user. Keep that workload role out of the three human permission sets. The exact headless integration is a later design decision and must be validated before implementation.
+
+If an AI agent can read or reuse a human's valid CLI/SDK credentials, it can exercise that human permission set. No permission-set policy or SCP can reliably distinguish the agent in that situation. This project will state that residual risk plainly and will not claim absolute technical prevention. The preventive requirement is credential separation plus exclusive assignments; the enforcement tests can verify assignments and isolated runtime configuration, not a caller's biological identity.
 
 ## 6. SCP and RCP strategy
 
@@ -109,7 +125,7 @@ Keep each policy in its own reviewed source file and use `aws_organizations_poli
 1. Entra owns users, group memberships, and group lifecycle. Configure SAML federation and SCIM provisioning outside this Terraform stack.
 2. Wait until each required group exists in IAM Identity Center. Resolve the group through `aws_identitystore_group` using its stable external ID when available, or exact `DisplayName` with a uniqueness check.
 3. Store the expected Entra group names/identifiers in private variables. Do not commit tenant IDs, SCIM tokens, or real group IDs.
-4. Build account assignments from a map of `{group_key, permission_set_key, account_keys}`. Validate that all keys exist and reject AI-admin assignment to management or production by default.
+4. Build account assignments from a map of `{group_key, permission_set_key, account_keys}`. Validate that all keys exist, reject AI-admin assignment to management or production, and reject AI-to-human or human-to-AI permission-set pairings by default.
 5. Terraform owns only `aws_ssoadmin_account_assignment`; it never creates a second copy of a provisioned group.
 
 Loss of SCIM sync or a group rename can break lookup and future plans; document ownership and recovery. A Terraform plan must fail on missing group rather than silently skip an assignment.
@@ -134,7 +150,7 @@ Use provider aliases only for resources that genuinely require different account
 | 1. Terraform foundation | Provider/version constraints, separate stacks, backend instructions, sanitized examples, format/validate CI | `terraform fmt -check` and offline `terraform validate` pass; CI has no apply job. |
 | 2. Hierarchy | OU module and existing account placement model | Plan shows only intended OU/account associations; no implicit account creation or management-account move. |
 | 3. Policies | SCP/RCP catalog, attachment maps, policy tests | JSON syntax and policy-type constraints pass; test OU rollout and documented exceptions. |
-| 4. Identity Center | Four inline-only permission sets and Entra group assignments | No managed policy attachment resources; every assignment resolves a real synchronized group; AI profile cannot target management/production by default. |
+| 4. Identity Center | Four inline-only permission sets and Entra group assignments | No managed policy attachment resources; every assignment resolves a real synchronized group; assignment validation rejects AI-to-human profile mappings and AI access to management/production. Negative tests cover AI role hopping and identity-policy mutation. |
 | 5. Portfolio evidence | Architecture diagram, sample redacted plans, operating guide, rollback examples, CI results | Reviewer can trace each guardrail to policy code, tests, scope, limitations, and rollout evidence. |
 
 Each stage gets a small reviewed commit/PR. Apply is a separate authorized operation with a saved plan, peer review, test-OU rollout, observation, and promotion. Never run destroy against the organization or Identity Center stack as a routine cleanup step.
@@ -144,6 +160,7 @@ Each stage gets a small reviewed commit/PR. Apply is a separate authorized opera
 - **Management account exposure:** SCPs and RCPs do not apply there. Limit direct access and keep break-glass credentials outside this codebase.
 - **Policy blast radius:** Root-level SCP/RCP mistakes can block operations across member accounts. Start in a test OU; document exceptions and rollback.
 - **AI guardrail coverage:** Explicit denies cover known destructive actions only. A new service action may bypass the list; scope the account and require human plan review.
+- **Human credential reuse:** The console, CLI, and SDK can use credentials from a human permission set. If an AI process gains those credentials, AWS cannot reliably identify it as an AI caller. Isolate agent execution and audit credential exposure; do not rely on user-agent strings.
 - **Inline policy quota:** Each set has one inline policy with AWS size limits, so a broad read-only policy may require a curated action list or a narrower profile.
 - **RCP coverage:** Only supported resource types participate; cross-account service integrations need testing.
 - **Identity lifecycle:** Entra/SCIM must exist and sync groups before Terraform assignment; changing group IDs can force assignment replacement.
@@ -158,5 +175,7 @@ Each stage gets a small reviewed commit/PR. Apply is a separate authorized opera
 - [AWS Organizations: management account best practices](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_best-practices_mgmt-acct.html)
 - [IAM Identity Center: Microsoft Entra SAML and SCIM](https://docs.aws.amazon.com/singlesignon/latest/userguide/idp-microsoft-entra.html)
 - [IAM Identity Center: permission-set quotas](https://docs.aws.amazon.com/singlesignon/latest/userguide/limits.html)
+- [IAM Identity Center: credentials for CLI and SDKs](https://docs.aws.amazon.com/singlesignon/latest/userguide/howtogetcredentials.html)
+- [IAM global condition keys: `aws:UserAgent` warning](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html)
 - [Terraform AWS provider: Organizations policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/organizations_policy)
 - [Terraform AWS provider: permission-set inline policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssoadmin_permission_set_inline_policy)

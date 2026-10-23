@@ -5,6 +5,7 @@
 - AWS display names: lowercase kebab case, `cn-org-<kind>-<scope>-<purpose>` where applicable.
 - Terraform resource labels and map keys: snake case.
 - Permission sets: inline policies only; do not add managed policy attachments.
+- Admin, read-only, and operator are human-only profiles. AI identities receive only the guarded AI profile and must never inherit human AWS CLI/SSO credentials.
 - Example files: placeholders only. Never commit account IDs, group IDs, tenant IDs, credentials, plans with sensitive values, or Terraform state.
 - Keep `AGENTS.md` as the routing entrypoint and `.ai/` as concise project context. `docs/project-plan.md` owns the architectural plan; do not duplicate its details here.
 
