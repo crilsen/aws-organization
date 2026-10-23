@@ -4,7 +4,7 @@ Portfolio project plan for a multi-account AWS organization governed as code. Th
 
 **Status:** architecture and implementation plan. No AWS resources are deployed by this repository yet.
 
-Read [the project plan](docs/project-plan.md) for the target architecture, naming rules, Terraform resources, delivery stages, acceptance criteria, and operational risks.
+Read [the project plan](docs/project-plan.md) for the target architecture, naming rules, Terraform resources, delivery stages, acceptance criteria, and operational risks. [CI/CD operations](docs/ci-cd.md) describe Jenkins Multibranch, GitHub Actions, GitLab CI, and selection of the apply runner.
 
 ## Design principles
 
@@ -13,6 +13,6 @@ Read [the project plan](docs/project-plan.md) for the target architecture, namin
 - Reference Entra-provisioned groups through the Identity Store. Terraform owns AWS account assignments, not workforce identities.
 - Reserve admin, read-only, and operator for human identities. AI workloads use only a guarded AI authorization profile, with separate credentials and no management-account assignment. This boundary depends on keeping human credentials out of AI runtimes, including AWS CLI SSO caches.
 - Manage SCPs and RCPs as separate policy types with staged attachments and documented exceptions.
-- Run validation and plans in CI. Production apply requires a separate, reviewed execution path.
+- Run the same Terraform commands through Jenkins Multibranch, GitHub Actions, or GitLab CI. Select one runner for each manual apply; use a private encrypted plan, native approval gate, and shared Terraform state lock.
 
 This is a public, sanitized design. Account IDs, tenant IDs, group IDs, credentials, state files, and company-specific names must stay outside the repository.

@@ -9,3 +9,5 @@ OUs: security, infrastructure, workloads (production and nonproduction), and san
 Every permission set policy is a single inline document. Entra owns group membership; Terraform owns AWS account assignments. No Terraform infrastructure code or CI exists yet.
 
 Admin, read-only, and operator are reserved for human Entra groups. Supervised AI use requires a distinct Entra-provisioned identity and guarded AI permission set; headless AI use requires a separate short-lived workload identity with equivalent or narrower controls. Human CLI/SSO credentials must not enter agent runtimes. See `docs/project-plan.md` for the limits of this boundary.
+
+Jenkins Multibranch, GitHub Actions, and GitLab CI call one `scripts/ci/terraform.sh` entrypoint. The operator chooses a platform for each apply run. Plans and apply logs are designed for private KMS-encrypted S3 storage; all platforms must share the Terraform backend lock. These CI definitions exist, but AWS identities, backend, plan bucket, protected approval environments, and Terraform stacks are not configured in this repository yet.

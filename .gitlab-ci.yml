@@ -1,0 +1,73 @@
+stages: [validate, plan, apply]
+
+variables:
+  TF_ACTION:
+    value: validate
+    options: [validate, plan, apply]
+    description: Choose the operation when starting the pipeline.
+  TF_STACK:
+    value: organization
+    options: [organization, identity-center]
+    description: Choose the Terraform stack for plan or apply.
+
+default:
+  tags: [terraform-governance]
+
+validate:
+  stage: validate
+  script:
+    - bash scripts/ci/terraform.sh validate
+
+plan:
+  stage: plan
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $TF_ACTION =~ /^(plan|apply)$/'
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  script:
+    - |
+      set -eu
+      oidc_file="$(mktemp)"
+      trap 'rm -f "$oidc_file"' EXIT
+      printf '%s' "$GITLAB_OIDC_TOKEN" > "$oidc_file"
+      export AWS_WEB_IDENTITY_TOKEN_FILE="$oidc_file"
+      export AWS_ROLE_ARN="$AWS_PLAN_ROLE_ARN"
+      export AWS_DEFAULT_REGION="$AWS_REGION"
+      export CI_ENGINE=gitlab CI_RUN_ID="$CI_PIPELINE_ID" CI_COMMIT_SHA="$CI_COMMIT_SHA" CI_REF="$CI_COMMIT_BRANCH"
+      export TF_METADATA_FILE=ci-plan.env
+      bash scripts/ci/terraform.sh plan "$TF_STACK"
+  artifacts:
+    reports:
+      dotenv: ci-plan.env
+    expire_in: 1 day
+
+apply:
+  stage: apply
+  needs:
+    - job: plan
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $TF_ACTION == "apply"'
+      when: manual
+      allow_failure: false
+  manual_confirmation: Review the private Terraform plan before applying it.
+  environment:
+    name: aws-organization-apply
+  resource_group: aws-organization-$TF_STACK
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  script:
+    - |
+      set -eu
+      oidc_file="$(mktemp)"
+      trap 'rm -f "$oidc_file"' EXIT
+      printf '%s' "$GITLAB_OIDC_TOKEN" > "$oidc_file"
+      export AWS_WEB_IDENTITY_TOKEN_FILE="$oidc_file"
+      export AWS_ROLE_ARN="$AWS_APPLY_ROLE_ARN"
+      export AWS_DEFAULT_REGION="$AWS_REGION"
+      export CI_ENGINE=gitlab CI_RUN_ID="$CI_PIPELINE_ID" CI_COMMIT_SHA="$CI_COMMIT_SHA" CI_REF="$CI_COMMIT_BRANCH"
+      export CI_APPLY_APPROVED=yes
+      export CI_APPLY_GATE_ACK="$APPLY_GATE_ACK"
+      bash scripts/ci/terraform.sh apply "$TF_STACK"

@@ -1,0 +1,103 @@
+name: Terraform governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Select validation, private plan, or reviewed apply
+        type: choice
+        required: true
+        default: validate
+        options: [validate, plan, apply]
+      stack:
+        description: Terraform root module for plan/apply
+        type: choice
+        required: true
+        default: organization
+        options: [organization, identity-center]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Format and validate implemented stacks
+        run: bash scripts/ci/terraform.sh validate
+
+  plan:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.action != 'validate'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      plan_key: ${{ steps.metadata.outputs.TF_PLAN_KEY }}
+      plan_sha256: ${{ steps.metadata.outputs.TF_PLAN_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Create encrypted private plan
+        env:
+          CI_ENGINE: github
+          CI_RUN_ID: ${{ github.run_id }}
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_REF: ${{ github.ref_name }}
+          TF_PLAN_BUCKET: ${{ vars.TF_PLAN_BUCKET }}
+          TF_PLAN_KMS_KEY: ${{ vars.TF_PLAN_KMS_KEY }}
+          TF_METADATA_FILE: ci-plan.env
+          TF_STACK: ${{ inputs.stack }}
+        run: bash scripts/ci/terraform.sh plan "$TF_STACK"
+      - name: Pass plan reference to approval job
+        id: metadata
+        run: cat ci-plan.env >> "$GITHUB_OUTPUT"
+
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.action == 'apply'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: aws-organization-apply
+    concurrency:
+      group: aws-organization-${{ inputs.stack }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Apply the reviewed plan
+        env:
+          CI_ENGINE: github
+          CI_RUN_ID: ${{ github.run_id }}
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_REF: ${{ github.ref_name }}
+          CI_APPLY_APPROVED: yes
+          CI_APPLY_GATE_ACK: ${{ vars.APPLY_GATE_ACK }}
+          TF_PLAN_BUCKET: ${{ vars.TF_PLAN_BUCKET }}
+          TF_PLAN_KMS_KEY: ${{ vars.TF_PLAN_KMS_KEY }}
+          TF_PLAN_KEY: ${{ needs.plan.outputs.plan_key }}
+          TF_PLAN_SHA256: ${{ needs.plan.outputs.plan_sha256 }}
+          TF_STACK: ${{ inputs.stack }}
+        run: bash scripts/ci/terraform.sh apply "$TF_STACK"

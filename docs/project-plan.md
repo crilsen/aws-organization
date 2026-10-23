@@ -57,7 +57,10 @@ examples/
 tests/
   policies/
 .github/workflows/
-  terraform-checks.yml
+  terraform.yml
+.gitlab-ci.yml
+Jenkinsfile
+scripts/ci/terraform.sh
 .ai/
 ```
 
@@ -147,7 +150,7 @@ Use provider aliases only for resources that genuinely require different account
 | Stage | Deliverable | Acceptance |
 | --- | --- | --- |
 | 0. Design and prerequisites | This plan, naming contract, account/OU inventory template, Entra group contract, threat and cost notes | Public files contain no real identifiers or secrets; owner approves the target organization and Identity Center instance. |
-| 1. Terraform foundation | Provider/version constraints, separate stacks, backend instructions, sanitized examples, format/validate CI | `terraform fmt -check` and offline `terraform validate` pass; CI has no apply job. |
+| 1. Terraform foundation | Provider/version constraints, separate stacks, backend instructions, sanitized examples, and all three CI integrations | `terraform fmt -check` and offline `terraform validate` pass; plan/apply remain gated by stack existence, private backend and plan storage, short-lived credentials, and native approval. |
 | 2. Hierarchy | OU module and existing account placement model | Plan shows only intended OU/account associations; no implicit account creation or management-account move. |
 | 3. Policies | SCP/RCP catalog, attachment maps, policy tests | JSON syntax and policy-type constraints pass; test OU rollout and documented exceptions. |
 | 4. Identity Center | Four inline-only permission sets and Entra group assignments | No managed policy attachment resources; every assignment resolves a real synchronized group; assignment validation rejects AI-to-human profile mappings and AI access to management/production. Negative tests cover AI role hopping and identity-policy mutation. |
@@ -155,7 +158,15 @@ Use provider aliases only for resources that genuinely require different account
 
 Each stage gets a small reviewed commit/PR. Apply is a separate authorized operation with a saved plan, peer review, test-OU rollout, observation, and promotion. Never run destroy against the organization or Identity Center stack as a routine cleanup step.
 
-## 10. Risks, limitations, and decisions to confirm before deployment
+## 10. CI/CD and apply-runner selection
+
+The repository contains `Jenkinsfile` for Jenkins Multibranch, `.github/workflows/terraform.yml` for GitHub Actions, and `.gitlab-ci.yml` for GitLab CI. All call `scripts/ci/terraform.sh` so validation, plan storage, plan checksum verification, and apply behavior stay consistent. Branches and pull requests run credential-free validation. A manual run on protected `main` selects `organization` or `identity-center` and either `plan` or `apply`. The user chooses **one** of Jenkins, GitHub Actions, or GitLab CI at run time; there is no repository setting that permanently fixes the apply platform.
+
+For `apply`, the selected platform creates a plan in the same run and uploads its binary and text output to a private KMS-encrypted S3 bucket. An authorized reviewer examines the private text plan, then approves the native manual gate. The apply job downloads the exact binary plan and verifies its SHA-256, CI engine, run ID, stack, and commit before executing it. GitHub and GitLab use OIDC roles with separate plan/apply permissions; Jenkins requires separately trusted short-lived AWS identities on restricted agents. Each stack uses one remote state key with locking across all three platforms. Apply logs remain private in the same encrypted bucket because this repository is public.
+
+The S3 plan bucket, KMS key, AWS trust policies, protected GitHub environment, protected GitLab environment, and restricted Jenkins apply job/agents must be configured before any live run. GitLab must receive a mirror of the repository for its pipeline to run. The current repository has no Terraform stacks or AWS credentials: validation can run, while plan/apply fail closed. See [CI/CD operations](ci-cd.md) for exact setup and limitations.
+
+## 11. Risks, limitations, and decisions to confirm before deployment
 
 - **Management account exposure:** SCPs and RCPs do not apply there. Limit direct access and keep break-glass credentials outside this codebase.
 - **Policy blast radius:** Root-level SCP/RCP mistakes can block operations across member accounts. Start in a test OU; document exceptions and rollback.
@@ -165,6 +176,7 @@ Each stage gets a small reviewed commit/PR. Apply is a separate authorized opera
 - **RCP coverage:** Only supported resource types participate; cross-account service integrations need testing.
 - **Identity lifecycle:** Entra/SCIM must exist and sync groups before Terraform assignment; changing group IDs can force assignment replacement.
 - **Bootstrap and state:** Remote state and organization creation cannot depend circularly on the same stack. Protect S3 state with encryption, versioning, access control, and tested recovery; keep state out of Git.
+- **CI approval and exposure:** A saved plan can contain plaintext sensitive values. Review it through a restricted S3 path, not a public CI artifact or log. GitHub environment reviewers, GitLab protected environments, and Jenkins submitter/agent restrictions are external setup requirements; a YAML/Jenkinsfile alone cannot establish them.
 - **Costs:** Organizations, SCPs, RCPs, and permission sets are governance constructs, but supporting services (CloudTrail, Config, S3 state, logging, account workloads) can incur charges. Confirm current pricing before deployment.
 - **Open deployment inputs:** Actual account inventory, OU ownership, approved regions, Entra group identifiers, Identity Center home region, break-glass process, and policy exceptions remain private inputs to confirm before an apply.
 
@@ -179,3 +191,7 @@ Each stage gets a small reviewed commit/PR. Apply is a separate authorized opera
 - [IAM global condition keys: `aws:UserAgent` warning](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html)
 - [Terraform AWS provider: Organizations policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/organizations_policy)
 - [Terraform AWS provider: permission-set inline policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssoadmin_permission_set_inline_policy)
+- [Jenkins Multibranch Pipeline](https://www.jenkins.io/doc/book/pipeline/multibranch/)
+- [GitHub deployment environment approvals](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments)
+- [GitLab manual jobs and protected environments](https://docs.gitlab.com/ci/jobs/job_control/)
+- [Terraform saved plan security](https://developer.hashicorp.com/terraform/cli/commands/plan)

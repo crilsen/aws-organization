@@ -6,6 +6,8 @@
 .terraform/
 crash.log
 crash.*.log
+*.tfplan
+ci-plan.env
 .env
 .env.*
 !.env.example
