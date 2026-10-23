@@ -2,7 +2,7 @@
 
 ## Active
 
-- Publish the documented project plan as a public repository under `crilsen`, if GitHub authentication permits.
+- None. The requested planning and publication are complete.
 
 ## Planned
 
@@ -13,3 +13,4 @@
 
 - Adopted the existing `.ai/` template for this project.
 - Documented the target architecture, naming, security model, Entra contract, Terraform resources, stages, and risks.
+- Published the plan to the public `crilsen/aws-organization` GitHub repository.
